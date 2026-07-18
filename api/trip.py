@@ -6,6 +6,11 @@ import asyncio
 import os
 import json
 
+try:
+    from _llm import call_llm
+except ImportError:
+    from api._llm import call_llm
+
 app = FastAPI()
 
 app.add_middleware(
@@ -17,7 +22,7 @@ app.add_middleware(
 
 WAQI_TOKEN = os.environ.get("WAQI_TOKEN", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-2.5-flash"
+FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY", "")
 DELHI_BBOX = "28.40,76.85,28.90,77.40"
 
 ACTIVITIES = {
@@ -69,12 +74,12 @@ async def fetch_forecast(client: httpx.AsyncClient, uid: int):
 async def plan_trip(req: TripRequest):
     if not WAQI_TOKEN:
         raise HTTPException(status_code=503, detail="Station backend not configured")
-    if not GEMINI_API_KEY:
+    if not GEMINI_API_KEY and not FIREWORKS_API_KEY:
         raise HTTPException(status_code=503, detail="Advisory backend not configured")
 
     activity_desc = ACTIVITIES.get(req.activity, ACTIVITIES["walk"])
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         board = await fetch_board(client)
         candidates = board[:6]  # best current AQI, real candidates only
         forecasts = await asyncio.gather(*[fetch_forecast(client, c["uid"]) for c in candidates])
@@ -103,17 +108,7 @@ async def plan_trip(req: TripRequest):
         )
 
         try:
-            gemini_r = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                params={"key": GEMINI_API_KEY},
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"responseMimeType": "application/json"},
-                },
-            )
-            gemini_r.raise_for_status()
-            gdata = gemini_r.json()
-            text = gdata["candidates"][0]["content"]["parts"][0]["text"]
+            text = await call_llm(client, prompt, json_mode=True)
             rec = json.loads(text)
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Trip planning failed: {e}")

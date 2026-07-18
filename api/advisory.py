@@ -3,6 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
 import os
+try:
+    from _llm import call_llm
+except ImportError:
+    from api._llm import call_llm
 
 app = FastAPI()
 
@@ -15,7 +19,7 @@ app.add_middleware(
 
 WAQI_TOKEN = os.environ.get("WAQI_TOKEN", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-2.5-flash"
+FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY", "")
 
 PROFILES = {
     "healthy": "a healthy adult",
@@ -56,10 +60,10 @@ class AdvisoryRequest(BaseModel):
 async def get_advisory(req: AdvisoryRequest):
     if not WAQI_TOKEN:
         raise HTTPException(status_code=503, detail="Station backend not configured")
-    if not GEMINI_API_KEY:
+    if not GEMINI_API_KEY and not FIREWORKS_API_KEY:
         raise HTTPException(status_code=503, detail="Advisory backend not configured")
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         station_r = await client.get(f"https://api.waqi.info/feed/@{req.uid}/", params={"token": WAQI_TOKEN})
         station_data = station_r.json()
         if station_data.get("status") != "ok":
@@ -94,14 +98,7 @@ async def get_advisory(req: AdvisoryRequest):
         )
 
         try:
-            gemini_r = await client.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                params={"key": GEMINI_API_KEY},
-                json={"contents": [{"parts": [{"text": prompt}]}]},
-            )
-            gemini_r.raise_for_status()
-            gdata = gemini_r.json()
-            text = gdata["candidates"][0]["content"]["parts"][0]["text"]
+            text = await call_llm(client, prompt)
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Advisory generation failed: {e}")
 
