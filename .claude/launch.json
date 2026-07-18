@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "vayu-watch-dev",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["dev.sh"],
+      "port": 8080
+    }
+  ]
+}
