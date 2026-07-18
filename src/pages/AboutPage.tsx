@@ -23,7 +23,7 @@ const features = [
   { icon: Map,   title: "Global City Search",    desc: "Search any city worldwide for live AQI, forecast, and interactive map." },
 ];
 
-const team = ["Satyansh Gaur", "Saksham Arora", "Sarthak Mehta", "Vaibhav"];
+const team = ["Satyansh Gaur", "Saksham Arora"];
 
 export default function AboutPage() {
   return (
