@@ -76,7 +76,7 @@ const HistoricalTrends = ({ historical, loading }: Props) => {
   const minAQI = hasData ? Math.min(...forecastData.map(d => d.aqi)) : null;
 
   return (
-    <section id="forecast" className="py-12 bg-gradient-to-b from-blue-50 to-white">
+    <section id="historical" className="py-12 bg-gradient-to-b from-blue-50 to-white">
       <style>{`
         .stat-card {
           transition: all 0.3s ease;

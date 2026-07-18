@@ -1,28 +1,54 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { LogOut, User } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { LogOut, User, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 export default function ProfilePage() {
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [checked, setChecked] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) navigate("/");
-      else setUser(data.session.user);
-    });
-  }, [navigate]);
+    supabase.auth.getSession()
+      .then(({ data }) => setUser(data.session?.user ?? null))
+      .catch(() => setUser(null))
+      .finally(() => setChecked(true));
+  }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     navigate("/");
   };
 
-  if (!user) return null;
+  if (!checked) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 py-16 max-w-md text-center">
+          <User className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
+          <h1 className="text-lg font-semibold mb-1">You're not signed in</h1>
+          <p className="text-sm text-muted-foreground mb-5">
+            Sign in from the home page to see your profile.
+          </p>
+          <Button asChild>
+            <Link to="/">Go to sign in</Link>
+          </Button>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

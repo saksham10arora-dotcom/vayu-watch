@@ -3,16 +3,55 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-const AlertPanel = () => {
-  const [alerts, setAlerts] = useState<{id: number; level: string; title: string; message: string; recommendations: string[]; timestamp: string; active: boolean}[]>([]);
+interface Props {
+  city?: string;
+  aqi?: number | null;
+  label?: string;
+}
 
-  const dismissAlert = (id: number) => {
-    setAlerts(alerts.map(alert => 
-      alert.id === id ? { ...alert, active: false } : alert
-    ).filter(alert => alert.active));
+interface LiveAlert {
+  id: string;
+  level: "info" | "warning" | "danger";
+  title: string;
+  message: string;
+  recommendations: string[];
+  timestamp: string;
+}
+
+function buildAlert(city: string, aqi: number, label: string): LiveAlert | null {
+  if (aqi <= 100) return null; // Good / Moderate — nothing to flag
+  const level = aqi > 150 ? "danger" : "warning";
+  return {
+    id: `${city}-${Math.round(aqi)}`,
+    level,
+    title: `${label} air quality in ${city}`,
+    message: `Current AQI is ${Math.round(aqi)}. ${
+      level === "danger"
+        ? "Reduce outdoor activity and wear a mask if you must go out."
+        : "Sensitive groups should limit prolonged outdoor exertion."
+    }`,
+    recommendations:
+      level === "danger"
+        ? ["Avoid outdoor exercise", "Wear an N95 mask outdoors", "Keep windows closed"]
+        : ["Limit prolonged outdoor exertion", "Sensitive groups should stay indoors during peak hours"],
+    timestamp: new Date().toISOString(),
   };
+}
+
+const AlertPanel = ({ city, aqi, label }: Props) => {
+  const [dismissedId, setDismissedId] = useState<string | null>(null);
+
+  const liveAlert = city && aqi != null && label ? buildAlert(city, aqi, label) : null;
+  const alerts = liveAlert && liveAlert.id !== dismissedId ? [liveAlert] : [];
+
+  // reset dismissal when a new city/reading comes in
+  useEffect(() => {
+    setDismissedId(null);
+  }, [city, aqi]);
+
+  const dismissAlert = (id: string) => setDismissedId(id);
 
   const getAlertIcon = (level: string) => {
     switch (level) {
@@ -85,7 +124,7 @@ const AlertPanel = () => {
               </h3>
               
               {alerts.map((alert) => (
-                <Alert key={alert.id} className={`${getAlertColor(alert.level)} border-l-4`}>
+                <Alert key={alert.id} className={`${getAlertColor(alert.level)} border-2`}>
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-3">
                       {getAlertIcon(alert.level)}

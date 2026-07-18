@@ -7,11 +7,17 @@ const Header = () => {
     { label: "Home", href: "/home" },
     { label: "Delhi Watch", href: "/delhi" },
     { label: "Live Map", href: "/map" },
-    { label: "Forecast", href: "/forecast" },
-    { label: "Alerts", href: "/alerts" },
+    { label: "Forecast", href: "/home#forecast" },
+    { label: "Alerts", href: "/home#alerts" },
     { label: "About", href: "/about" },
     { label: "Profile", href: "/profile" }
   ];
+
+  const isActive = (href: string) => {
+    const [path, hash] = href.split("#");
+    if (hash) return location.pathname === path && location.hash === `#${hash}`;
+    return location.pathname === path;
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-gray-800 bg-black/95 backdrop-blur supports-[backdrop-filter]:bg-black/95 shadow-lg">
@@ -33,7 +39,7 @@ const Header = () => {
                 key={item.label}
                 to={item.href}
                 className={`flex items-center justify-center gap-2 rounded-md px-3 h-9 text-sm font-medium transition-colors hover:text-white hover:bg-gray-800 ${
-                  location.pathname === item.href ? "text-white bg-gray-800" : "text-gray-300"
+                  isActive(item.href) ? "text-white bg-gray-800" : "text-gray-300"
                 }`}
               >
                 {item.label}

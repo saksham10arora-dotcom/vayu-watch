@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { Search, Loader2 } from "lucide-react";
 import Header from "@/components/Header";
 import AQIDashboard from "@/components/AQIDashboard";
@@ -13,11 +14,23 @@ import { useAirQuality } from "@/hooks/useAirQuality";
 const Index = () => {
   const [input, setInput] = useState("");
   const { data, loading, error, search } = useAirQuality();
+  const location = useLocation();
 
   useEffect(() => {
     const api = import.meta.env.VITE_API_URL;
     if (api) fetch(`${api}/`).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!location.hash) return;
+    const id = location.hash.slice(1);
+    // Longer delay so this reliably wins the race against the browser's own
+    // scroll-restoration attempt on a hard/direct load of a hash URL.
+    const timer = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [location.hash]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +72,7 @@ const Index = () => {
         <AQIDashboard data={data} loading={loading} />
         <InteractiveMap lat={data?.lat} lon={data?.lon} city={data?.city} aqi={data?.current.aqi} />
         <ForecastChart forecast={data?.forecast ?? []} loading={loading} />
-        <AlertPanel />
+        <AlertPanel city={data?.city} aqi={data?.current.aqi} label={data?.current.label} />
         <HistoricalTrends historical={data?.historical ?? []} loading={loading} />
         <MLPrediction city={data?.city} />
       </main>
