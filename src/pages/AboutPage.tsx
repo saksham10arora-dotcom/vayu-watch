@@ -10,7 +10,7 @@ const stack = [
   { layer: "Delhi AQI",     tech: "WAQI — 24 live DPCC/CPCB ground stations" },
   { layer: "Health Advisory", tech: "Google Gemini — profile-aware guidance per station" },
   { layer: "Locality History", tech: "Elasticsearch — indexes every reading in real time" },
-  { layer: "ML Forecast",   tech: "scikit-learn Random Forest — trained per-request on live data" },
+  { layer: "ML Forecast",   tech: "Hour-of-day seasonal average — computed per-request on live data (no ML deps, keeps serverless bundle lean)" },
   { layer: "Auth",          tech: "Supabase (email / password)" },
   { layer: "Global AQI",    tech: "Open-Meteo Air Quality + Forecast API" },
   { layer: "Geocoding",     tech: "OpenStreetMap Nominatim" },
