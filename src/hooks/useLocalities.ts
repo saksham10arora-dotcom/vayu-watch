@@ -32,7 +32,53 @@ export interface HistoryPoint {
   aqi?: number | null;
 }
 
-export type HealthProfile = "healthy" | "asthma" | "child" | "elderly" | "pregnant";
+export type HealthProfile =
+  | "healthy"
+  | "asthma"
+  | "copd"
+  | "heart"
+  | "diabetes"
+  | "child"
+  | "elderly"
+  | "pregnant"
+  | "athlete"
+  | "outdoor_worker";
+
+const PROFILE_KEY = "vayu-watch-health-profile";
+const STATION_KEY = "vayu-watch-last-station-uid";
+
+export function getSavedProfile(): HealthProfile | null {
+  try {
+    return (localStorage.getItem(PROFILE_KEY) as HealthProfile) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveProfile(profile: HealthProfile) {
+  try {
+    localStorage.setItem(PROFILE_KEY, profile);
+  } catch {
+    // ignore — localStorage unavailable (private browsing, etc.)
+  }
+}
+
+export function getSavedStationUid(): number | null {
+  try {
+    const raw = localStorage.getItem(STATION_KEY);
+    return raw ? Number(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveStationUid(uid: number) {
+  try {
+    localStorage.setItem(STATION_KEY, String(uid));
+  } catch {
+    // ignore
+  }
+}
 
 export function useLocalities() {
   const [localities, setLocalities] = useState<Locality[]>([]);
@@ -115,4 +161,51 @@ export function useAdvisory() {
   }, []);
 
   return { snapshot, advisory, loading, error, fetchAdvisory };
+}
+
+export type TripActivity = "school_trip" | "sports" | "picnic" | "walk" | "errand";
+
+export interface TripRecommendation {
+  locality: string;
+  day: string;
+  time_of_day: string;
+  reasoning: string;
+  safety_note: string;
+}
+
+export interface TripPlanResult {
+  recommendation: TripRecommendation;
+  uid: number;
+  candidates_considered: { name: string; aqi: number }[];
+}
+
+export function useTripPlan() {
+  const [result, setResult] = useState<TripPlanResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchTripPlan = useCallback(async (activity: TripActivity) => {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch(`${API}/api/trip`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activity }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Trip planning failed");
+      }
+      const json: TripPlanResult = await res.json();
+      setResult(json);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Trip planning failed");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { result, loading, error, fetchTripPlan };
 }

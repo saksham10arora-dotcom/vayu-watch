@@ -7,6 +7,7 @@
     { "source": "/api/localities", "destination": "/api/localities.py" },
     { "source": "/api/history",    "destination": "/api/history.py" },
     { "source": "/api/advisory",   "destination": "/api/advisory.py" },
+    { "source": "/api/trip",       "destination": "/api/trip.py" },
     { "source": "/(.*)",           "destination": "/index.html" }
   ]
 }

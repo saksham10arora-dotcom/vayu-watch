@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => ({
       "/api/localities": "http://localhost:8003",
       "/api/history":    "http://localhost:8004",
       "/api/advisory":   "http://localhost:8005",
+      "/api/trip":       "http://localhost:8006",
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),

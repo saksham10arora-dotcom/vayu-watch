@@ -19,10 +19,15 @@ GEMINI_MODEL = "gemini-2.5-flash"
 
 PROFILES = {
     "healthy": "a healthy adult",
-    "asthma": "an adult with asthma or a respiratory condition",
+    "asthma": "an adult with asthma or a chronic respiratory condition",
+    "copd": "an adult with COPD or another chronic lung disease",
+    "heart": "an adult with a heart condition or cardiovascular disease",
+    "diabetes": "an adult with diabetes",
     "child": "a young child",
     "elderly": "an elderly person",
     "pregnant": "a pregnant woman",
+    "athlete": "someone who exercises or trains outdoors regularly",
+    "outdoor_worker": "someone who works outdoors for extended hours (construction, delivery, street vending, etc.)",
 }
 
 

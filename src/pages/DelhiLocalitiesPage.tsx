@@ -10,7 +10,12 @@ import Footer from "@/components/Footer";
 import SmogCanvas from "@/components/SmogCanvas";
 import LocalityHistoryChart from "@/components/LocalityHistoryChart";
 import { useCountUp } from "@/hooks/useCountUp";
-import { useLocalities, useAdvisory, type Locality, type HealthProfile } from "@/hooks/useLocalities";
+import {
+  useLocalities, useAdvisory,
+  getSavedProfile, saveProfile, getSavedStationUid, saveStationUid,
+  type Locality, type HealthProfile,
+} from "@/hooks/useLocalities";
+import TripPlanner from "@/components/TripPlanner";
 
 function aqiColor(aqi: number | null): string {
   if (aqi === null) return "text-gray-400";
@@ -50,16 +55,21 @@ function pm25FromAqi(aqi: number): number {
 const PROFILES: { value: HealthProfile; label: string }[] = [
   { value: "healthy", label: "Healthy Adult" },
   { value: "asthma", label: "Asthma / Respiratory" },
+  { value: "copd", label: "COPD / Chronic Lung" },
+  { value: "heart", label: "Heart Condition" },
+  { value: "diabetes", label: "Diabetes" },
   { value: "child", label: "Young Child" },
   { value: "elderly", label: "Elderly" },
   { value: "pregnant", label: "Pregnant" },
+  { value: "athlete", label: "Athlete / Regular Exerciser" },
+  { value: "outdoor_worker", label: "Outdoor Worker" },
 ];
 
 const DelhiLocalitiesPage = () => {
   const { localities, elasticEnabled, loading, error, fetchLocalities } = useLocalities();
   const { snapshot, advisory, loading: advisoryLoading, error: advisoryError, fetchAdvisory } = useAdvisory();
   const [selected, setSelected] = useState<Locality | null>(null);
-  const [profile, setProfile] = useState<HealthProfile>("healthy");
+  const [profile, setProfile] = useState<HealthProfile>(() => getSavedProfile() ?? "healthy");
 
   useEffect(() => {
     fetchLocalities();
@@ -67,10 +77,15 @@ const DelhiLocalitiesPage = () => {
     return () => window.clearInterval(id);
   }, [fetchLocalities]);
 
-  // auto-focus the worst station on load (hero + smog only, no advisory call)
+  // restore the last-viewed station once the board loads, else fall back to worst
   useEffect(() => {
-    if (!selected && localities.length) setSelected(localities[0]);
-  }, [localities, selected]);
+    if (selected || !localities.length) return;
+    const savedUid = getSavedStationUid();
+    const saved = savedUid != null ? localities.find((l) => l.uid === savedUid) : null;
+    const loc = saved ?? localities[0];
+    setSelected(loc);
+    fetchAdvisory(loc.uid, profile);
+  }, [localities, selected, profile, fetchAdvisory]);
 
   const heroAqi = selected?.aqi ?? null;
   // WAQI iaqi values are US-AQI sub-indices, not µg/m³ — invert EPA breakpoints
@@ -88,7 +103,13 @@ const DelhiLocalitiesPage = () => {
 
   const handleSelect = (loc: Locality) => {
     setSelected(loc);
+    saveStationUid(loc.uid);
     fetchAdvisory(loc.uid, profile);
+  };
+
+  const handleSelectByUid = (uid: number) => {
+    const loc = localities.find((l) => l.uid === uid);
+    if (loc) handleSelect(loc);
   };
 
   return (
@@ -198,6 +219,7 @@ const DelhiLocalitiesPage = () => {
                       value={profile}
                       onValueChange={(v) => {
                         setProfile(v as HealthProfile);
+                        saveProfile(v as HealthProfile);
                         if (selected) fetchAdvisory(selected.uid, v as HealthProfile);
                       }}
                     >
@@ -246,6 +268,11 @@ const DelhiLocalitiesPage = () => {
                   )}
                 </CardContent>
               </Card>
+            </section>
+
+            {/* Trip Planner */}
+            <section className="container mx-auto px-4 pb-16 max-w-3xl">
+              <TripPlanner onViewStation={handleSelectByUid} />
             </section>
           </main>
 
