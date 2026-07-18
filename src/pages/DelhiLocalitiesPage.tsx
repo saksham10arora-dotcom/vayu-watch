@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
-import { Loader2, MapPin, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Loader2, Sparkles, Cigarette } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import SmogCanvas from "@/components/SmogCanvas";
 import LocalityHistoryChart from "@/components/LocalityHistoryChart";
+import { useCountUp } from "@/hooks/useCountUp";
 import { useLocalities, useAdvisory, type Locality, type HealthProfile } from "@/hooks/useLocalities";
 
 function aqiColor(aqi: number | null): string {
@@ -20,13 +21,30 @@ function aqiColor(aqi: number | null): string {
   return "text-purple-400";
 }
 
-function aqiBg(aqi: number | null): string {
-  if (aqi === null) return "border-border";
-  if (aqi <= 50) return "border-green-400/40";
-  if (aqi <= 100) return "border-yellow-400/40";
-  if (aqi <= 150) return "border-orange-400/40";
-  if (aqi <= 200) return "border-red-400/40";
-  return "border-purple-400/40";
+function aqiDot(aqi: number | null): string {
+  if (aqi === null) return "bg-gray-400";
+  if (aqi <= 50) return "bg-green-400";
+  if (aqi <= 100) return "bg-yellow-400";
+  if (aqi <= 150) return "bg-orange-400";
+  if (aqi <= 200) return "bg-red-400";
+  return "bg-purple-400";
+}
+
+/** Inverse US-EPA PM2.5 breakpoints: estimate concentration (µg/m³) from AQI. */
+function pm25FromAqi(aqi: number): number {
+  const bp: [number, number, number, number][] = [
+    [0, 50, 0, 12],
+    [50, 100, 12.1, 35.4],
+    [100, 150, 35.5, 55.4],
+    [150, 200, 55.5, 150.4],
+    [200, 300, 150.5, 250.4],
+    [300, 500, 250.5, 500.4],
+  ];
+  const a = Math.min(Math.max(aqi, 0), 500);
+  for (const [aLo, aHi, cLo, cHi] of bp) {
+    if (a <= aHi) return cLo + ((a - aLo) / (aHi - aLo)) * (cHi - cLo);
+  }
+  return 500;
 }
 
 const PROFILES: { value: HealthProfile; label: string }[] = [
@@ -45,133 +63,195 @@ const DelhiLocalitiesPage = () => {
 
   useEffect(() => {
     fetchLocalities();
+    const id = window.setInterval(fetchLocalities, 60_000); // refresh + feed Elastic
+    return () => window.clearInterval(id);
   }, [fetchLocalities]);
 
-  const handleAdvisory = (loc: Locality) => {
+  // auto-focus the worst station on load (hero + smog only, no advisory call)
+  useEffect(() => {
+    if (!selected && localities.length) setSelected(localities[0]);
+  }, [localities, selected]);
+
+  const heroAqi = selected?.aqi ?? null;
+  // WAQI iaqi values are US-AQI sub-indices, not µg/m³ — invert EPA breakpoints
+  // to get concentration. Prefer the station's PM2.5 sub-index when loaded.
+  const pm25 = useMemo(() => {
+    if (snapshot && selected && snapshot.locality === selected.locality && snapshot.pm2_5 != null) {
+      return pm25FromAqi(snapshot.pm2_5);
+    }
+    return heroAqi != null ? pm25FromAqi(heroAqi) : 0;
+  }, [snapshot, selected, heroAqi]);
+
+  const cigarettes = pm25 / 22; // Berkeley Earth: 22 µg/m³ PM2.5 ≈ 1 cigarette/day
+  const animatedAqi = useCountUp(heroAqi ?? 0);
+  const animatedCigs = useCountUp(cigarettes);
+
+  const handleSelect = (loc: Locality) => {
     setSelected(loc);
     fetchAdvisory(loc.uid, profile);
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      <main className="flex-1 py-12 bg-gradient-to-b from-background to-muted/20">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold mb-2">Delhi Locality Watch</h1>
-            <p className="text-muted-foreground">
-              Live AQI from {localities.length || "24"} real DPCC/CPCB ground stations across Delhi
-            </p>
-            {elasticEnabled && (
-              <Badge variant="secondary" className="mt-2">
-                Indexing every reading to Elasticsearch
-              </Badge>
-            )}
-          </div>
+    <div className="dark">
+      <div className="relative min-h-screen flex flex-col bg-neutral-950 text-neutral-100">
+        <SmogCanvas pm25={pm25} />
 
-          {loading && localities.length === 0 && (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-10 w-10 animate-spin text-blue-400" />
-            </div>
-          )}
+        <div className="relative z-10 flex flex-col min-h-screen">
+          <Header />
 
-          {error && (
-            <p className="text-center text-red-400 mb-6">{error}</p>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 max-w-6xl mx-auto mb-10">
-            {localities.map((loc, i) => (
-              <Card
-                key={loc.uid}
-                className={`border-2 ${aqiBg(loc.aqi)} hover:shadow-lg transition-shadow cursor-pointer ${selected?.uid === loc.uid ? "ring-2 ring-blue-400" : ""}`}
-                onClick={() => handleAdvisory(loc)}
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="text-sm flex items-start gap-1.5 leading-tight">
-                      <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-                      {loc.locality}
-                    </CardTitle>
-                    {i === 0 && <Badge variant="destructive" className="shrink-0 text-[10px]">Worst</Badge>}
-                    {i === localities.length - 1 && <Badge variant="secondary" className="shrink-0 text-[10px]">Best</Badge>}
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-end justify-between">
-                    <div className={`text-4xl font-bold ${aqiColor(loc.aqi)}`}>
-                      {loc.aqi != null ? Math.round(loc.aqi) : "--"}
-                    </div>
-                    <Badge variant="outline" className="text-[10px]">{loc.label}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <Card className="max-w-3xl mx-auto">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-blue-400" />
-                Personalized Health Advisory
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
-                <Select
-                  value={profile}
-                  onValueChange={(v) => {
-                    setProfile(v as HealthProfile);
-                    if (selected) fetchAdvisory(selected.uid, v as HealthProfile);
-                  }}
-                >
-                  <SelectTrigger className="w-full sm:w-56">
-                    <SelectValue placeholder="Health profile" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PROFILES.map((p) => (
-                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <span className="text-sm text-muted-foreground">
-                  {selected ? `for ${selected.locality}` : "Click a station above to get advisory"}
+          <main className="flex-1">
+            {/* Hero — the air you are breathing */}
+            <section className="container mx-auto px-4 pt-14 pb-10">
+              <div className="flex items-center gap-2 text-sm text-neutral-400 mb-6">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-60 motion-reduce:hidden" />
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
                 </span>
+                Live from {localities.length || 24} DPCC/CPCB ground stations · the haze on this page is {selected?.locality ?? "Delhi"}'s air right now
               </div>
 
-              {advisoryLoading && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Generating advisory via Gemini…
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-end">
+                <div>
+                  <h1 className="text-2xl font-semibold text-neutral-300 mb-1 text-balance">
+                    {selected?.locality ?? "Delhi"}
+                  </h1>
+                  <div className="flex items-end gap-4 flex-wrap">
+                    <span
+                      className={`font-black leading-none tracking-tight ${aqiColor(heroAqi)}`}
+                      style={{ fontSize: "clamp(4rem, 14vw, 6rem)" }}
+                    >
+                      {heroAqi != null ? Math.round(animatedAqi) : "--"}
+                    </span>
+                    <div className="pb-2">
+                      <div className="text-lg font-semibold">{selected?.label ?? ""}</div>
+                      <div className="text-sm text-neutral-400">US AQI</div>
+                    </div>
+                  </div>
                 </div>
-              )}
-              {advisoryError && <p className="text-red-400 text-sm">{advisoryError}</p>}
 
-              {snapshot && (
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs text-muted-foreground">
-                  <div>PM2.5<div className="text-foreground font-medium">{snapshot.pm2_5 ?? "--"}</div></div>
-                  <div>PM10<div className="text-foreground font-medium">{snapshot.pm10 ?? "--"}</div></div>
-                  <div>NO₂<div className="text-foreground font-medium">{snapshot.no2 ?? "--"}</div></div>
-                  <div>O₃<div className="text-foreground font-medium">{snapshot.o3 ?? "--"}</div></div>
-                  <div>SO₂<div className="text-foreground font-medium">{snapshot.so2 ?? "--"}</div></div>
-                  <div>CO<div className="text-foreground font-medium">{snapshot.co ?? "--"}</div></div>
+                <div className="lg:justify-self-end">
+                  <div className="flex items-center gap-4">
+                    <Cigarette className="h-10 w-10 text-neutral-500 shrink-0" aria-hidden="true" />
+                    <div>
+                      <div className="text-4xl font-bold">
+                        {animatedCigs.toFixed(1)}
+                        <span className="text-lg font-medium text-neutral-400"> cigarettes/day</span>
+                      </div>
+                      <p className="text-sm text-neutral-400 max-w-xs">
+                        Breathing this air ≈ smoking {cigarettes.toFixed(1)} cigarettes daily
+                        <span className="text-neutral-500"> (Berkeley Earth: 22 µg/m³ PM2.5 ≈ 1 cig)</span>
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              )}
+              </div>
+            </section>
 
-              {advisory && (
-                <div className="bg-muted/30 rounded-lg p-4 text-sm leading-relaxed">
-                  {advisory}
+            {/* Station rail */}
+            <section className="container mx-auto px-4 pb-10">
+              {loading && localities.length === 0 && (
+                <div className="flex justify-center py-10">
+                  <Loader2 className="h-8 w-8 animate-spin text-neutral-400" />
                 </div>
               )}
+              {error && <p className="text-red-400 mb-4">{error}</p>}
 
-              {selected && (
-                <div className="pt-2 border-t">
-                  <LocalityHistoryChart uid={selected.uid} locality={selected.locality} />
-                </div>
+              <div className="flex flex-wrap gap-2">
+                {localities.map((loc) => (
+                  <button
+                    key={loc.uid}
+                    onClick={() => handleSelect(loc)}
+                    aria-pressed={selected?.uid === loc.uid}
+                    className={`flex items-center gap-2 rounded-full border px-3.5 py-2 text-sm transition-colors ${
+                      selected?.uid === loc.uid
+                        ? "border-neutral-100 bg-neutral-100 text-neutral-950 font-semibold"
+                        : "border-white/15 bg-white/[0.04] text-neutral-200 hover:bg-white/10"
+                    }`}
+                  >
+                    <span className={`h-2 w-2 rounded-full ${aqiDot(loc.aqi)}`} aria-hidden="true" />
+                    {loc.locality}
+                    <span className={selected?.uid === loc.uid ? "font-bold" : `font-semibold ${aqiColor(loc.aqi)}`}>
+                      {loc.aqi != null ? Math.round(loc.aqi) : "--"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {elasticEnabled && (
+                <p className="mt-3 text-xs text-neutral-500">
+                  Every reading is being indexed to Elasticsearch as you watch.
+                </p>
               )}
-            </CardContent>
-          </Card>
+            </section>
+
+            {/* Advisory */}
+            <section className="container mx-auto px-4 pb-16 max-w-3xl">
+              <Card className="bg-neutral-900/80 backdrop-blur-sm border-white/10">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-blue-400" />
+                    Personalized Health Advisory
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                    <Select
+                      value={profile}
+                      onValueChange={(v) => {
+                        setProfile(v as HealthProfile);
+                        if (selected) fetchAdvisory(selected.uid, v as HealthProfile);
+                      }}
+                    >
+                      <SelectTrigger className="w-full sm:w-56">
+                        <SelectValue placeholder="Health profile" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PROFILES.map((p) => (
+                          <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="text-sm text-neutral-400">
+                      {selected ? `for ${selected.locality}` : "Select a station above"}
+                    </span>
+                  </div>
+
+                  {advisoryLoading && (
+                    <div className="flex items-center gap-2 text-neutral-400">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Generating advisory via Gemini…
+                    </div>
+                  )}
+                  {advisoryError && <p className="text-red-400 text-sm">{advisoryError}</p>}
+
+                  {snapshot && (
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs text-neutral-400" title="Pollutant sub-indices on the US AQI scale">
+                      <div>PM2.5<div className="text-neutral-100 font-medium">{snapshot.pm2_5 ?? "--"}</div></div>
+                      <div>PM10<div className="text-neutral-100 font-medium">{snapshot.pm10 ?? "--"}</div></div>
+                      <div>NO₂<div className="text-neutral-100 font-medium">{snapshot.no2 ?? "--"}</div></div>
+                      <div>O₃<div className="text-neutral-100 font-medium">{snapshot.o3 ?? "--"}</div></div>
+                      <div>SO₂<div className="text-neutral-100 font-medium">{snapshot.so2 ?? "--"}</div></div>
+                      <div>CO<div className="text-neutral-100 font-medium">{snapshot.co ?? "--"}</div></div>
+                    </div>
+                  )}
+
+                  {advisory && (
+                    <div className="bg-white/[0.06] rounded-lg p-4 text-sm leading-relaxed">
+                      {advisory}
+                    </div>
+                  )}
+
+                  {selected && (
+                    <div className="pt-2 border-t border-white/10">
+                      <LocalityHistoryChart uid={selected.uid} locality={selected.locality} />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </section>
+          </main>
+
+          <Footer />
         </div>
-      </main>
-      <Footer />
+      </div>
     </div>
   );
 };
