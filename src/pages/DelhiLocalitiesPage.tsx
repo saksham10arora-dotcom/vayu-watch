@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/select";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import LocalityHistoryChart from "@/components/LocalityHistoryChart";
 import { useLocalities, useAdvisory, type Locality, type HealthProfile } from "@/hooks/useLocalities";
 
 function aqiColor(aqi: number | null): string {
@@ -158,6 +159,12 @@ const DelhiLocalitiesPage = () => {
               {advisory && (
                 <div className="bg-muted/30 rounded-lg p-4 text-sm leading-relaxed">
                   {advisory}
+                </div>
+              )}
+
+              {selected && (
+                <div className="pt-2 border-t">
+                  <LocalityHistoryChart uid={selected.uid} locality={selected.locality} />
                 </div>
               )}
             </CardContent>
